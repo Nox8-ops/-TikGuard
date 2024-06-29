@@ -7,18 +7,19 @@ import random
 import logging
 from termcolor import colored
 from tqdm import tqdm
+import getpass
 
 VERSION = "1.0.0-beta"
 
 class TikGuard:
-    def __init__(self, proxies=None):
+    def __init__(self, proxies=None, max_retries=3, retry_delay=5):
         self.session = requests.Session()
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Content-Type': 'application/json'
         }
-        self.max_retries = 3
-        self.retry_delay = 5  # seconds
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay  # seconds
         self.proxies = proxies if proxies else []
 
     def switch_proxy(self):
@@ -39,7 +40,7 @@ class TikGuard:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
                 report_button = soup.find('button', {'class': 'report-button-class'})
-                if report_button and 'data-report-url' in report_button.attrs:
+                if report_button and report_button.has_attr('data-report-url'):
                     return report_button['data-report-url']
                 
                 scripts = soup.find_all('script')
@@ -50,7 +51,7 @@ class TikGuard:
                         return script.text[report_url_start:report_url_end]
                         
             except requests.exceptions.RequestException as e:
-                logging.error(f"Error fetching video page: {e}, retrying in {self.retry_delay} seconds...")
+                logging.error(f"Error fetching video page: {e}, retrying in {self.retry_delay} seconds...", exc_info=True)
                 time.sleep(self.retry_delay)
         return None
 
@@ -66,7 +67,7 @@ class TikGuard:
                 response.raise_for_status()
                 return "Report submitted successfully!"
             except requests.exceptions.RequestException as e:
-                logging.error(f"Error submitting report: {e}, retrying in {self.retry_delay} seconds...")
+                logging.error(f"Error submitting report: {e}, retrying in {self.retry_delay} seconds...", exc_info=True)
                 time.sleep(self.retry_delay)
         return "Failed to submit report."
 
@@ -104,6 +105,8 @@ Options:
   --password PASSWORD     TikTok password for login
   --proxy PROXY           Proxy server (e.g., http://proxyserver:port)
   --proxies-file FILE     File containing a list of proxy servers
+  --max-retries N         Maximum number of retries (default: 3)
+  --retry-delay SECONDS   Delay between retries in seconds (default: 5)
   video_url               URL of the TikTok video to report
   reason                  Reason for reporting the video
 
@@ -121,6 +124,8 @@ def main():
     parser.add_argument('--password', help='TikTok password for login', default=None)
     parser.add_argument('--proxy', help='Proxy server (e.g., http://proxyserver:port)', default=None)
     parser.add_argument('--proxies-file', help='File containing a list of proxy servers', default=None)
+    parser.add_argument('--max-retries', help='Maximum number of retries', type=int, default=3)
+    parser.add_argument('--retry-delay', help='Delay between retries in seconds', type=int, default=5)
     parser.add_argument('--help', action='store_true', help='Show this help message and exit')
 
     args = parser.parse_args()
@@ -138,10 +143,11 @@ def main():
 
     print_logo()
     
-    reporter = TikGuard(proxies=proxies)
+    reporter = TikGuard(proxies=proxies, max_retries=args.max_retries, retry_delay=args.retry_delay)
 
     if args.username and args.password:
-        reporter.login(args.username, args.password)
+        password = getpass.getpass(prompt='Password: ')
+        reporter.login(args.username, password)
 
     report_url = reporter.get_report_url(args.video_url)
     if report_url:
