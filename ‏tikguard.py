@@ -7,9 +7,10 @@ import random
 import logging
 from termcolor import colored
 from tqdm import tqdm
-import getpass
+import sys
 
 VERSION = "1.0.0-beta"
+DEVELOPER = "@Nox9"
 
 class TikGuard:
     def __init__(self, proxies=None, max_retries=3, retry_delay=5):
@@ -71,19 +72,6 @@ class TikGuard:
                 time.sleep(self.retry_delay)
         return "Failed to submit report."
 
-    def login(self, username, password):
-        login_url = 'https://www.tiktok.com/login'
-        payload = {
-            'username': username,
-            'password': password
-        }
-        try:
-            response = self.session.post(login_url, json=payload, headers=self.headers)
-            response.raise_for_status()
-            print("Logged in successfully!")
-        except requests.exceptions.RequestException as e:
-            print(f"Error logging in: {e}")
-
 def print_logo():
     logo = """
 ████████╗██╗██╗  ██╗ ██████╗ ██╗   ██╗ ██████╗  █████╗ ██████╗ 
@@ -91,10 +79,10 @@ def print_logo():
    ██║   ██║███████║██║   ██║██║   ██║██║  ███╗███████║██████╔╝
    ██║   ██║██╔══██║██║   ██║██║   ██║██║   ██║██╔══██║██╔═══╝ 
    ██║   ██║██║  ██║╚██████╔╝╚██████╔╝╚██████╔╝██║  ██║██║     
-   ╚═╝   ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     
+   ╚═╝   ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝     
     """
     print(colored(logo, 'cyan'))
-    print(colored(f"Version: {VERSION}", 'green'))
+    print(colored(f"Version: {VERSION} - Developed by: {DEVELOPER}", 'green'))
 
 def print_help():
     help_text = """
@@ -117,7 +105,12 @@ Examples:
     print(help_text)
 
 def main():
-    parser = argparse.ArgumentParser(description="TikGuard - TikTok Reporting Tool")
+    if '--help' in sys.argv:
+        print_logo()
+        print_help()
+        return
+
+    parser = argparse.ArgumentParser(description="TikGuard - TikTok Reporting Tool", add_help=False)
     parser.add_argument('video_url', help='URL of the TikTok video to report')
     parser.add_argument('reason', help='Reason for reporting the video')
     parser.add_argument('--username', help='TikTok username for login', default=None)
@@ -130,10 +123,6 @@ def main():
 
     args = parser.parse_args()
 
-    if args.help:
-        print_help()
-        return
-
     proxies = []
     if args.proxy:
         proxies.append(args.proxy)
@@ -144,10 +133,6 @@ def main():
     print_logo()
     
     reporter = TikGuard(proxies=proxies, max_retries=args.max_retries, retry_delay=args.retry_delay)
-
-    if args.username and args.password:
-        password = getpass.getpass(prompt='Password: ')
-        reporter.login(args.username, password)
 
     report_url = reporter.get_report_url(args.video_url)
     if report_url:
