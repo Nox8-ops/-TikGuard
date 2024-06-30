@@ -2,7 +2,7 @@ import time
 import random
 import logging
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog
 from tqdm import tqdm
 from termcolor import colored
 from rich.console import Console
@@ -43,11 +43,14 @@ class TikGuard:
             try:
                 self.switch_proxy()
                 self.driver.get(video_url)
-                time.sleep(3)  # Wait for the page to load
+                time.sleep(5)  # زيادة وقت الانتظار للتأكد من تحميل الصفحة بالكامل
 
-                report_button = self.driver.find_element(By.CLASS_NAME, 'report-button-class')
-                if report_button:
-                    return report_button.get_attribute('data-report-url')
+                try:
+                    report_button = self.driver.find_element(By.XPATH, '//*[contains(@class, "report-button-class")]')
+                    if report_button:
+                        return report_button.get_attribute('data-report-url')
+                except:
+                    pass
                 
                 scripts = self.driver.find_elements(By.TAG_NAME, 'script')
                 for script in scripts:
@@ -97,28 +100,34 @@ class TikGuardApp:
         self.root = root
         self.root.title("TikGuard - TikTok Reporting Tool")
 
-        self.video_url_label = tk.Label(root, text="Video URL:")
-        self.video_url_label.pack()
-        self.video_url_entry = tk.Entry(root, width=50)
-        self.video_url_entry.pack()
+        mainframe = ttk.Frame(root, padding="10")
+        mainframe.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        self.reason_label = tk.Label(root, text="Reason:")
-        self.reason_label.pack()
-        self.reason_entry = tk.Entry(root, width=50)
-        self.reason_entry.pack()
+        self.video_url_label = ttk.Label(mainframe, text="Video URL:")
+        self.video_url_label.grid(row=1, column=1, sticky=tk.W)
+        self.video_url_entry = ttk.Entry(mainframe, width=50)
+        self.video_url_entry.grid(row=1, column=2, columnspan=2)
 
-        self.proxies_file_label = tk.Label(root, text="Proxies File (optional):")
-        self.proxies_file_label.pack()
-        self.proxies_file_entry = tk.Entry(root, width=50)
-        self.proxies_file_entry.pack()
-        self.proxies_file_button = tk.Button(root, text="Browse", command=self.browse_proxies_file)
-        self.proxies_file_button.pack()
+        self.reason_label = ttk.Label(mainframe, text="Reason:")
+        self.reason_label.grid(row=2, column=1, sticky=tk.W)
+        self.reason_entry = ttk.Entry(mainframe, width=50)
+        self.reason_entry.grid(row=2, column=2, columnspan=2)
 
-        self.submit_button = tk.Button(root, text="Submit Report", command=self.submit_report)
-        self.submit_button.pack()
+        self.proxies_file_label = ttk.Label(mainframe, text="Proxies File (optional):")
+        self.proxies_file_label.grid(row=3, column=1, sticky=tk.W)
+        self.proxies_file_entry = ttk.Entry(mainframe, width=40)
+        self.proxies_file_entry.grid(row=3, column=2)
+        self.proxies_file_button = ttk.Button(mainframe, text="Browse", command=self.browse_proxies_file)
+        self.proxies_file_button.grid(row=3, column=3)
 
-        self.status_label = tk.Label(root, text="", fg="red")
-        self.status_label.pack()
+        self.submit_button = ttk.Button(mainframe, text="Submit Report", command=self.submit_report)
+        self.submit_button.grid(row=4, column=2, pady=10)
+
+        self.status_label = ttk.Label(mainframe, text="", foreground="red")
+        self.status_label.grid(row=5, column=1, columnspan=3)
+
+        for child in mainframe.winfo_children(): 
+            child.grid_configure(padx=5, pady=5)
 
     def browse_proxies_file(self):
         filename = filedialog.askopenfilename()
@@ -143,7 +152,7 @@ class TikGuardApp:
                 messagebox.showerror("Error", f"Failed to read proxies file: {e}")
                 return
 
-        self.status_label.config(text="Submitting report...", fg="blue")
+        self.status_label.config(text="Submitting report...", foreground="blue")
         self.root.update()
 
         reporter = TikGuard(proxies=proxies)
@@ -154,9 +163,9 @@ class TikGuardApp:
                 for i in range(100):
                     time.sleep(0.01)
                     pbar.update(1)
-                self.status_label.config(text=result, fg="green" if "successfully" in result else "red")
+                self.status_label.config(text=result, foreground="green" if "successfully" in result else "red")
         else:
-            self.status_label.config(text="Failed to find report URL.", fg="red")
+            self.status_label.config(text="Failed to find report URL.", foreground="red")
 
 def main():
     print_logo()
