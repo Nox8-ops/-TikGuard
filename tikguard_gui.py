@@ -1,15 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
-import json
+import re
 import time
 import random
 import logging
-from termcolor import colored
-from tqdm import tqdm
-import sys
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import filedialog
+from tkinter import messagebox, filedialog
+from tqdm import tqdm
+from termcolor import colored
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -46,7 +44,8 @@ class TikGuard:
                 response = self.session.get(video_url, headers=self.headers)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, 'html.parser')
-                
+
+                # Attempt to find the report URL in different ways
                 report_button = soup.find('button', {'class': 'report-button-class'})
                 if report_button and report_button.has_attr('data-report-url'):
                     return report_button['data-report-url']
@@ -54,10 +53,16 @@ class TikGuard:
                 scripts = soup.find_all('script')
                 for script in scripts:
                     if 'reportUrl' in script.text:
-                        report_url_start = script.text.find('reportUrl') + len('reportUrl\":\"')
-                        report_url_end = script.text.find('\"', report_url_start)
-                        return script.text[report_url_start:report_url_end]
-                        
+                        report_url_match = re.search(r'reportUrl":"(https[^"]+)"', script.text)
+                        if report_url_match:
+                            return report_url_match.group(1)
+                
+                # Additional pattern matching if needed
+                pattern = re.compile(r'\"reportUrl\":\"(https[^\"]+)\"')
+                matches = pattern.findall(response.text)
+                if matches:
+                    return matches[0]
+
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error fetching video page: {e}, retrying in {self.retry_delay} seconds...", exc_info=True)
                 time.sleep(self.retry_delay)
@@ -86,7 +91,7 @@ def print_logo():
    ██║   ██║███████║██║   ██║██║   ██║██║  ███╗███████║██████╔╝
    ██║   ██║██╔══██║██║   ██║██║   ██║██║   ██║██╔══██║██╔═══╝ 
    ██║   ██║██║  ██║╚██████╔╝╚██████╔╝╚██████╔╝██║  ██║██║     
-   ╚═╝   ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝     
+   ╚═╝   ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     
     """
     console.print(colored(logo, 'cyan'))
     console.print(colored(f"Version: {VERSION} - Developed by: {DEVELOPER}", 'green'))
