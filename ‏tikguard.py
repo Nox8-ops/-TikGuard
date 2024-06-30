@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import argparse
 import json
 import time
 import random
@@ -8,6 +7,14 @@ import logging
 from termcolor import colored
 from tqdm import tqdm
 import sys
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import filedialog
+from rich.console import Console
+from rich.logging import RichHandler
+
+console = Console()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[RichHandler()])
 
 VERSION = "1.0.0-beta"
 DEVELOPER = "@Nox9"
@@ -81,70 +88,81 @@ def print_logo():
    ██║   ██║██║  ██║╚██████╔╝╚██████╔╝╚██████╔╝██║  ██║██║     
    ╚═╝   ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝     
     """
-    print(colored(logo, 'cyan'))
-    print(colored(f"Version: {VERSION} - Developed by: {DEVELOPER}", 'green'))
+    console.print(colored(logo, 'cyan'))
+    console.print(colored(f"Version: {VERSION} - Developed by: {DEVELOPER}", 'green'))
 
-def print_help():
-    help_text = """
-Usage: TikGuard [options]
+class TikGuardApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("TikGuard - TikTok Reporting Tool")
 
-Options:
-  --username USERNAME     TikTok username for login
-  --password PASSWORD     TikTok password for login
-  --proxy PROXY           Proxy server (e.g., http://proxyserver:port)
-  --proxies-file FILE     File containing a list of proxy servers
-  --max-retries N         Maximum number of retries (default: 3)
-  --retry-delay SECONDS   Delay between retries in seconds (default: 5)
-  video_url               URL of the TikTok video to report
-  reason                  Reason for reporting the video
+        self.video_url_label = tk.Label(root, text="Video URL:")
+        self.video_url_label.pack()
+        self.video_url_entry = tk.Entry(root, width=50)
+        self.video_url_entry.pack()
 
-Examples:
-  TikGuard https://www.tiktok.com/@user/video/1234567890 Spam
-  TikGuard --username user --password pass https://www.tiktok.com/@user/video/1234567890 Inappropriate
-"""
-    print(help_text)
+        self.reason_label = tk.Label(root, text="Reason:")
+        self.reason_label.pack()
+        self.reason_entry = tk.Entry(root, width=50)
+        self.reason_entry.pack()
+
+        self.proxies_file_label = tk.Label(root, text="Proxies File (optional):")
+        self.proxies_file_label.pack()
+        self.proxies_file_entry = tk.Entry(root, width=50)
+        self.proxies_file_entry.pack()
+        self.proxies_file_button = tk.Button(root, text="Browse", command=self.browse_proxies_file)
+        self.proxies_file_button.pack()
+
+        self.submit_button = tk.Button(root, text="Submit Report", command=self.submit_report)
+        self.submit_button.pack()
+
+        self.status_label = tk.Label(root, text="", fg="red")
+        self.status_label.pack()
+
+    def browse_proxies_file(self):
+        filename = filedialog.askopenfilename()
+        self.proxies_file_entry.delete(0, tk.END)
+        self.proxies_file_entry.insert(0, filename)
+
+    def submit_report(self):
+        video_url = self.video_url_entry.get()
+        reason = self.reason_entry.get()
+        proxies_file = self.proxies_file_entry.get()
+
+        if not video_url or not reason:
+            messagebox.showerror("Error", "Please enter both video URL and reason.")
+            return
+
+        proxies = []
+        if proxies_file:
+            try:
+                with open(proxies_file, 'r') as file:
+                    proxies.extend([line.strip() for line in file])
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to read proxies file: {e}")
+                return
+
+        self.status_label.config(text="Submitting report...", fg="blue")
+        self.root.update()
+
+        reporter = TikGuard(proxies=proxies)
+        report_url = reporter.get_report_url(video_url)
+        if report_url:
+            with tqdm(total=100, desc="Submitting report", ncols=100) as pbar:
+                result = reporter.submit_report(report_url, reason)
+                for i in range(100):
+                    time.sleep(0.01)
+                    pbar.update(1)
+                self.status_label.config(text=result, fg="green" if "successfully" in result else "red")
+        else:
+            self.status_label.config(text="Failed to find report URL.", fg="red")
 
 def main():
-    if '--help' in sys.argv:
-        print_logo()
-        print_help()
-        return
-
-    parser = argparse.ArgumentParser(description="TikGuard - TikTok Reporting Tool", add_help=False)
-    parser.add_argument('video_url', help='URL of the TikTok video to report')
-    parser.add_argument('reason', help='Reason for reporting the video')
-    parser.add_argument('--username', help='TikTok username for login', default=None)
-    parser.add_argument('--password', help='TikTok password for login', default=None)
-    parser.add_argument('--proxy', help='Proxy server (e.g., http://proxyserver:port)', default=None)
-    parser.add_argument('--proxies-file', help='File containing a list of proxy servers', default=None)
-    parser.add_argument('--max-retries', help='Maximum number of retries', type=int, default=3)
-    parser.add_argument('--retry-delay', help='Delay between retries in seconds', type=int, default=5)
-    parser.add_argument('--help', action='store_true', help='Show this help message and exit')
-
-    args = parser.parse_args()
-
-    proxies = []
-    if args.proxy:
-        proxies.append(args.proxy)
-    if args.proxies_file:
-        with open(args.proxies_file, 'r') as file:
-            proxies.extend([line.strip() for line in file])
-
     print_logo()
-    
-    reporter = TikGuard(proxies=proxies, max_retries=args.max_retries, retry_delay=args.retry_delay)
 
-    report_url = reporter.get_report_url(args.video_url)
-    if report_url:
-        with tqdm(total=100, desc="Submitting report", ncols=100) as pbar:
-            result = reporter.submit_report(report_url, args.reason)
-            for i in range(100):
-                time.sleep(0.01)
-                pbar.update(1)
-            print(result)
-    else:
-        print("Failed to find report URL.")
+    root = tk.Tk()
+    app = TikGuardApp(root)
+    root.mainloop()
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     main()
