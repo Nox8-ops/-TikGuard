@@ -1,6 +1,3 @@
-import requests
-from bs4 import BeautifulSoup
-import re
 import time
 import random
 import logging
@@ -10,6 +7,11 @@ from tqdm import tqdm
 from termcolor import colored
 from rich.console import Console
 from rich.logging import RichHandler
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
 console = Console()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[RichHandler()])
@@ -19,11 +21,9 @@ DEVELOPER = "@Nox9"
 
 class TikGuard:
     def __init__(self, proxies=None, max_retries=3, retry_delay=5):
-        self.session = requests.Session()
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Content-Type': 'application/json'
-        }
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         self.max_retries = max_retries
         self.retry_delay = retry_delay  # seconds
         self.proxies = proxies if proxies else []
@@ -31,39 +31,32 @@ class TikGuard:
     def switch_proxy(self):
         if self.proxies:
             proxy = random.choice(self.proxies)
-            self.session.proxies = {
-                'http': proxy,
-                'https': proxy
-            }
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument(f'--proxy-server={proxy}')
+            self.driver.quit()
+            self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             logging.info(f"Switched to proxy: {proxy}")
 
     def get_report_url(self, video_url):
         for attempt in range(self.max_retries):
             try:
                 self.switch_proxy()
-                response = self.session.get(video_url, headers=self.headers)
-                response.raise_for_status()
-                soup = BeautifulSoup(response.content, 'html.parser')
+                self.driver.get(video_url)
+                time.sleep(3)  # Wait for the page to load
 
-                # Attempt to find the report URL in different ways
-                report_button = soup.find('button', {'class': 'report-button-class'})
-                if report_button and report_button.has_attr('data-report-url'):
-                    return report_button['data-report-url']
+                report_button = self.driver.find_element(By.CLASS_NAME, 'report-button-class')
+                if report_button:
+                    return report_button.get_attribute('data-report-url')
                 
-                scripts = soup.find_all('script')
+                scripts = self.driver.find_elements(By.TAG_NAME, 'script')
                 for script in scripts:
-                    if 'reportUrl' in script.text:
-                        report_url_match = re.search(r'reportUrl":"(https[^"]+)"', script.text)
+                    if 'reportUrl' in script.get_attribute('innerHTML'):
+                        report_url_match = re.search(r'reportUrl":"(https[^"]+)"', script.get_attribute('innerHTML'))
                         if report_url_match:
                             return report_url_match.group(1)
-                
-                # Additional pattern matching if needed
-                pattern = re.compile(r'\"reportUrl\":\"(https[^\"]+)\"')
-                matches = pattern.findall(response.text)
-                if matches:
-                    return matches[0]
 
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 logging.error(f"Error fetching video page: {e}, retrying in {self.retry_delay} seconds...", exc_info=True)
                 time.sleep(self.retry_delay)
         return None
@@ -76,10 +69,13 @@ class TikGuard:
         for attempt in range(self.max_retries):
             try:
                 self.switch_proxy()
-                response = self.session.post(report_url, json=payload, headers=self.headers)
-                response.raise_for_status()
+                self.driver.get(report_url)
+                time.sleep(2)  # Wait for the report page to load
+                self.driver.find_element(By.NAME, 'reason').send_keys(reason)
+                self.driver.find_element(By.NAME, 'additional_info').send_keys('Spam or inappropriate content')
+                self.driver.find_element(By.TAG_NAME, 'form').submit()
                 return "Report submitted successfully!"
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 logging.error(f"Error submitting report: {e}, retrying in {self.retry_delay} seconds...", exc_info=True)
                 time.sleep(self.retry_delay)
         return "Failed to submit report."
